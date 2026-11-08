@@ -1,26 +1,29 @@
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import requests
 
-GAME_URL = 'https://www.cheapshark.com/api/1.0/deals'
+BASE_URL = 'https://www.cheapshark.com/api/1.0/'
 USER_AGENT = 'game-deal-tracker-project'
 DATA_DIR = Path('data')
+DEALS_PAGE_SIZE = 20
 REQUEST_TIMEOUT = 30
+STEAM_STORE_ID = 1
 
-def download_store_deals(game_store):
+
+def fetch_json(endpoint, params):
     try:
         response = requests.get(
-            GAME_URL,
+            BASE_URL + endpoint,
             headers={'User-Agent': USER_AGENT},
-            params={'storeID': game_store, 'pageSize': 20},
-            timeout=REQUEST_TIMEOUT
+            params=params,
+            timeout=REQUEST_TIMEOUT,
         )
         response.raise_for_status()
     except requests.RequestException as e:
-        sys.exit(f'Game data download failed: {e}')
-    print(f'Deals status: {response.status_code}')
+        sys.exit(f'Request to {endpoint} failed: {e}')
+    print(f'{endpoint} status: {response.status_code}')
     return response.json()
 
 
@@ -30,14 +33,15 @@ def save_deals(content):
 
     with open(raw_path, 'w') as f:
         json.dump(content, f, indent=2)
-    print(f'Saved to : {raw_path}')
+    print(f'Saved to: {raw_path}')
 
 
 def main():
-    deals = download_store_deals(1)
+    deals = fetch_json('deals', {'storeID': STEAM_STORE_ID,
+                                 'pageSize': DEALS_PAGE_SIZE})
     save_deals(deals)
     for deal in deals:
-        print(f'Game name: {deal['title']} / Sale Price: {deal['salePrice']}')
+        print(f"Game name: {deal['title']} / Sale Price: {deal['salePrice']}")
 
 
 if __name__ == '__main__':
