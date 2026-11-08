@@ -36,6 +36,8 @@ def save_deals(content):
 def main():
     deals = download_store_deals(1)
     save_deals(deals)
+    for deal in deals:
+        print(f'Game name: {deal['title']} / Sale Price: {deal['salePrice']}')
 
 
 if __name__ == '__main__':
