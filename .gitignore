@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+.env
+data/
+*.gz
+commands.txt
+.env*
+notes/
+CLAUDE.md
+logs/
