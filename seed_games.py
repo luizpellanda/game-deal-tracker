@@ -1,3 +1,9 @@
+import os
+import sys
+
+import psycopg
+from dotenv import load_dotenv
+
 from app import fetch_json
 
 GAME_IDS = [
@@ -24,10 +30,29 @@ GAME_IDS = [
 ]
 
 
+def save_game(conn, game_id, info):
+    conn.execute(
+        'INSERT INTO games (id, title, steam_app_id, thumb_url) '
+        'VALUES (%s, %s, %s, %s) ON CONFLICT (id) DO NOTHING',
+        (int(game_id), info['title'], info['steamAppID'], info['thumb']),
+    )
+
+
 def main():
+    load_dotenv()
+    database_url = os.getenv('DATABASE_URL')
+    if not database_url:
+        sys.exit('DATABASE_URL is not set.')
+
     ids_text = ','.join(str(game_id) for game_id in GAME_IDS)
     games = fetch_json('games', {'ids': ids_text})
     print(f'Games received: {len(games)}')
+
+    with psycopg.connect(database_url) as conn:
+        for game_id, game in games.items():
+            save_game(conn, game_id, game['info'])
+        row = conn.execute('SELECT COUNT(*) FROM games').fetchone()
+    print(row[0])
 
 
 if __name__ == '__main__':

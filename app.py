@@ -27,19 +27,19 @@ def fetch_json(endpoint, params):
     return response.json()
 
 
-def save_deals(content):
+def save_sample(content, file_name):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    raw_path = DATA_DIR / 'sample_deals.json'
+    file_path = DATA_DIR / file_name
 
-    with open(raw_path, 'w') as f:
+    with open(file_path, 'w') as f:
         json.dump(content, f, indent=2)
-    print(f'Saved to: {raw_path}')
+    print(f'Saved to: {file_path}')
 
 
 def main():
     deals = fetch_json('deals', {'storeID': STEAM_STORE_ID,
                                  'pageSize': DEALS_PAGE_SIZE})
-    save_deals(deals)
+    save_sample(deals, 'sample_deals.json')
     for deal in deals:
         print(f"Game name: {deal['title']} / Sale Price: {deal['salePrice']}")
 
