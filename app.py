@@ -1,5 +1,4 @@
 import json
-import sys
 from pathlib import Path
 
 import requests
@@ -12,6 +11,10 @@ REQUEST_TIMEOUT = 30
 STEAM_STORE_ID = 1
 
 
+class CheapSharkError(Exception):
+    pass
+
+
 def fetch_json(endpoint, params):
     try:
         response = requests.get(
@@ -22,12 +25,12 @@ def fetch_json(endpoint, params):
         )
         if response.status_code == 429:
             wait_time = response.headers.get("Retry-After", "unknown")
-            sys.exit(
+            raise CheapSharkError(
                 f"Rate limited on {endpoint} (429). Retry after {wait_time} seconds."
             )
         response.raise_for_status()
     except requests.RequestException as e:
-        sys.exit(f"Request to {endpoint} failed: {e}")
+        raise CheapSharkError(f"Request to {endpoint} failed: {e}") from e
     print(f"{endpoint} status: {response.status_code}")
     return response.json()
 

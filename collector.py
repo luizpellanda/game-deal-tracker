@@ -6,7 +6,7 @@ from decimal import Decimal
 import psycopg
 from dotenv import load_dotenv
 
-from app import fetch_json
+from app import CheapSharkError, fetch_json
 
 
 def load_monitored_games(conn):
@@ -49,7 +49,11 @@ def main():
         print(f"Games to collect: {len(games_loaded)}.")
 
     ids_text = ",".join(str(game_id) for game_id in games_loaded)
-    games = fetch_json("games", {"ids": ids_text})
+
+    try:
+        games = fetch_json("games", {"ids": ids_text})
+    except CheapSharkError as e:
+        sys.exit(f"Collector stopped, no prices saved: {e}")
     print(f"Games received: {len(games)}.")
 
     saved = 0

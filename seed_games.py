@@ -4,7 +4,7 @@ import sys
 import psycopg
 from dotenv import load_dotenv
 
-from app import fetch_json
+from app import CheapSharkError, fetch_json
 
 GAME_IDS = [
     126,  # Sid Meier's Civilization IV
@@ -45,7 +45,11 @@ def main():
         sys.exit("DATABASE_URL is not set.")
 
     ids_text = ",".join(str(game_id) for game_id in GAME_IDS)
-    games = fetch_json("games", {"ids": ids_text})
+
+    try:
+        games = fetch_json("games", {"ids": ids_text})
+    except CheapSharkError as e:
+        sys.exit(f"Seed stopped, no games saved: {e}")
     print(f"Games received: {len(games)}")
 
     with psycopg.connect(database_url) as conn:
