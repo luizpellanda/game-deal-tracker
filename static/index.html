@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Game Deal Tracker</title>
+  <meta name="description" content="Daily PC game prices collected from CheapShark, with price history charts.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="page-header">
+    <div class="container">
+      <h1>Game Deal Tracker</h1>
+      <p class="subtitle">PC game prices, collected once a day from CheapShark.</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card" aria-labelledby="history-title">
+      <div class="section-head">
+        <h2 id="history-title">Price history</h2>
+        <div class="field">
+          <label for="game-select">Tracked game</label>
+          <select id="game-select" disabled>
+            <option>Loading…</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="chart-area">
+        <div class="chart-head">
+          <h3 id="chart-title" class="chart-title"></h3>
+          <ul class="legend" aria-label="Legend">
+            <li><span class="key key-lowest" aria-hidden="true"></span>Lowest price of the day</li>
+            <li><span class="key key-normal" aria-hidden="true"></span>Normal price</li>
+          </ul>
+        </div>
+        <p id="chart-summary" class="chart-summary"></p>
+        <div class="chart-box">
+          <canvas id="history-chart" role="img" aria-label="Price history chart"></canvas>
+        </div>
+        <p id="chart-note" class="note" hidden></p>
+
+        <details class="table-view">
+          <summary>Show all prices as a table</summary>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Date</th>
+                  <th scope="col">Store</th>
+                  <th scope="col" class="num">Price</th>
+                  <th scope="col" class="num">Normal price</th>
+                </tr>
+              </thead>
+              <tbody id="history-rows"></tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+
+      <p id="history-status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="card" aria-labelledby="search-title">
+      <h2 id="search-title">Search any game</h2>
+      <form id="search-form" class="search-form" novalidate>
+        <div class="field grow">
+          <label for="search-input">Game title</label>
+          <input id="search-input" name="title" type="search" minlength="2" required
+                 autocomplete="off" placeholder="e.g. Baldur's Gate">
+        </div>
+        <button id="search-button" type="submit">Search</button>
+      </form>
+      <p class="hint">Shows the cheapest current price. Only tracked games have a price history.</p>
+      <p id="search-status" class="status" role="status" aria-live="polite"></p>
+      <ul id="search-results" class="results"></ul>
+    </section>
+  </main>
+
+  <footer class="page-footer">
+    <div class="container">
+      Prices from <a href="https://www.cheapshark.com/" rel="noopener">CheapShark</a>. Prices in USD.
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -6,6 +6,7 @@ from typing import Annotated
 import psycopg
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.staticfiles import StaticFiles
 
 from app import CheapSharkError, fetch_json
 
@@ -74,3 +75,7 @@ def search_games(title: Annotated[str, Query(min_length=2)]):
         )
 
     return games_list
+
+
+# The website (static/index.html and friends). Mounted last so the API routes above win.
+app.mount("/", StaticFiles(directory="static", html=True), name="site")
