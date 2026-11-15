@@ -21,12 +21,64 @@ app = FastAPI()
 @app.get("/games")
 def get_games():
     with psycopg.connect(DATABASE_URL) as conn:
-        rows = conn.execute("SELECT id, title FROM games ORDER BY title").fetchall()
+        rows = conn.execute(
+            """
+            SELECT g.id,
+                   g.title,
+                   g.thumb_url,
+                   MIN(p.sale_price) AS lowest_price,
+                   MAX(p.normal_price) AS normal_price
+            FROM games g
+            LEFT JOIN price_history p
+                   ON p.game_id = g.id
+                  AND p.recorded_on = (SELECT MAX(recorded_on) FROM price_history)
+            GROUP BY g.id, g.title, g.thumb_url
+            ORDER BY g.title
+            """
+        ).fetchall()
 
     results = []
     for row in rows:
-        results.append({"id": row[0], "title": row[1]})
+        if row[4]:
+            discount_percent = round(100 - (row[3] / row[4] * 100))
+        else:
+            discount_percent = None
 
+        results.append(
+            {
+                "id": row[0],
+                "title": row[1],
+                "thumb_url": row[2],
+                "lowest_price": row[3],
+                "normal_price": row[4],
+                "discount_percent": discount_percent,
+            }
+        )
+
+    return results
+
+
+@app.get("/stats")
+def get_stats():
+    with psycopg.connect(DATABASE_URL) as conn:
+        games_row = conn.execute(
+            """
+            SELECT COUNT(*) FROM games
+            """
+        ).fetchone()
+        history_row = conn.execute(
+            """
+            SELECT COUNT(DISTINCT recorded_on), MIN(recorded_on), MAX(recorded_on)
+            FROM price_history
+            """
+        ).fetchone()
+
+    results = {
+        "games_tracked": games_row[0],
+        "days_collected": history_row[0],
+        "first_day": history_row[1],
+        "last_day": history_row[2],
+    }
     return results
 
 
