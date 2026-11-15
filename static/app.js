@@ -20,6 +20,8 @@ const STORE_NAMES = {
 
 const $ = (id) => document.getElementById(id);
 
+const SEARCH_COOLDOWN_MS = 2000;
+
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const darkScheme = window.matchMedia("(prefers-color-scheme: dark)");
@@ -577,7 +579,10 @@ $("search-form").addEventListener("submit", async (event) => {
       : `Search failed: ${error.message}`;
     setStatus(status, message, true);
   } finally {
-    button.disabled = false;
+    // Short cooldown so repeated clicks can't flood the API.
+    setTimeout(() => {
+      button.disabled = false;
+    }, SEARCH_COOLDOWN_MS);
   }
 });
 

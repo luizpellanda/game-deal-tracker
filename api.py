@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from decimal import Decimal
 from typing import Annotated
 
@@ -16,6 +17,9 @@ if not DATABASE_URL:
     sys.exit("DATABASE_URL is not set.")
 
 app = FastAPI()
+
+GAME_SEARCH_CACHE = {}
+CACHE_SECONDS = 600  # 10 MINUTES
 
 
 @app.get("/games")
@@ -110,8 +114,13 @@ def get_game_history(game_id: int):
 
 @app.get("/games/search")
 def search_games(title: Annotated[str, Query(min_length=2)]):
+    key = title.strip().lower()
+    saved = GAME_SEARCH_CACHE.get(key)
+    if saved and time.monotonic() - saved[0] < CACHE_SECONDS:
+        return saved[1]  # still fresh: answer from memory
+
     try:
-        games = fetch_json("games", {"title": title, "limit": 10})
+        games = fetch_json("games", {"title": key, "limit": 10})
     except CheapSharkError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
@@ -125,6 +134,7 @@ def search_games(title: Annotated[str, Query(min_length=2)]):
                 "thumb_url": game["thumb"],
             }
         )
+    GAME_SEARCH_CACHE[key] = (time.monotonic(), games_list)
 
     return games_list
 

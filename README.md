@@ -73,7 +73,7 @@ Each price is stored once per game, store and day: `UNIQUE (game_id, store_id, r
 
 ### Staying within CheapShark's rate limit
 
-CheapShark is free and rate-limited, and excessive automated traffic can get a client banned permanently. The collector fetches all tracked games in a single request, once a day. On HTTP 429 it stops and reports the `Retry-After` value instead of retrying in a loop; the next attempt is the next scheduled run. Searches only run when the user submits the form, with at least two characters.
+CheapShark is free and rate-limited, and excessive automated traffic can get a client banned permanently. The collector fetches all tracked games in a single request, once a day. On HTTP 429 it stops and reports the `Retry-After` value instead of retrying in a loop; the next attempt is the next scheduled run. Searches only run when the user submits the form, with at least two characters, and the API keeps each search result in memory for 10 minutes, so repeated searches do not reach CheapShark again.
 
 ### Failures as exceptions, handled by the caller
 
