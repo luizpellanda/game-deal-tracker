@@ -4,47 +4,90 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Game Deal Tracker</title>
-  <meta name="description" content="Daily PC game prices collected from CheapShark, with price history charts.">
+  <meta name="description" content="Daily PC game prices collected from CheapShark, with discounts and price history.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <script>
+    // Apply the saved theme before the page paints, so it never flashes.
+    try {
+      const saved = localStorage.getItem("theme");
+      if (saved === "light" || saved === "dark") {
+        document.documentElement.dataset.theme = saved;
+      }
+    } catch {
+      // Storage blocked: follow the OS setting.
+    }
+  </script>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
-  <header class="page-header">
-    <div class="container">
-      <h1>Game Deal Tracker</h1>
-      <p class="subtitle">PC game prices, collected once a day from CheapShark.</p>
+  <header class="site-header">
+    <div class="container header-row">
+      <a class="brand" href="/" aria-label="Game Deal Tracker, home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect width="32" height="32" rx="7" class="brand-bg"/>
+          <path d="M6.5 9.5a1.5 1.5 0 0 1 1.5-1.5h10.4a1.5 1.5 0 0 1 1.06.44l6.5 6.5a1.5 1.5 0 0 1 0 2.12l-6.5 6.5a1.5 1.5 0 0 1-1.06.44H8a1.5 1.5 0 0 1-1.5-1.5z" class="brand-tag"/>
+          <circle cx="20.5" cy="16" r="1.7" class="brand-bg"/>
+          <path d="M12.5 11.5v8M9.5 16.5l3 3 3-3" class="brand-arrow"/>
+        </svg>
+        <span class="brand-name">Game Deal Tracker</span>
+      </a>
+      <button id="theme-toggle" class="icon-button" type="button" aria-label="Switch to dark theme">
+        <svg class="icon icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+        </svg>
+        <svg class="icon icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
+        </svg>
+      </button>
     </div>
   </header>
 
   <main class="container">
-    <section class="card" aria-labelledby="history-title">
-      <div class="section-head">
-        <h2 id="history-title">Price history</h2>
-        <div class="field">
-          <label for="game-select">Tracked game</label>
-          <select id="game-select" disabled>
-            <option>Loading…</option>
-          </select>
-        </div>
-      </div>
+    <section class="intro" aria-labelledby="intro-title">
+      <h1 id="intro-title">Today's PC game deals</h1>
+      <p class="lead">Prices from the main PC stores, collected once a day. Pick a game to see how its price changed.</p>
 
+      <dl class="stats" id="stats" aria-live="polite">
+        <div class="stat">
+          <dt>Games tracked</dt>
+          <dd id="stat-games" class="stat-value">–</dd>
+        </div>
+        <div class="stat">
+          <dt>Biggest discount today</dt>
+          <dd><span id="stat-discount" class="stat-value">–</span>
+            <span id="stat-discount-game" class="stat-sub"></span></dd>
+        </div>
+        <div class="stat">
+          <dt>Price history</dt>
+          <dd><span id="stat-days" class="stat-value">–</span>
+            <span id="stat-days-since" class="stat-sub"></span></dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="panel" id="history-panel" aria-labelledby="chart-title" tabindex="-1">
       <div id="chart-area">
         <div class="chart-head">
-          <h3 id="chart-title" class="chart-title"></h3>
-          <ul class="legend" aria-label="Legend">
-            <li><span class="key key-lowest" aria-hidden="true"></span>Lowest price of the day</li>
-            <li><span class="key key-normal" aria-hidden="true"></span>Normal price</li>
-          </ul>
+          <div class="chart-heading">
+            <p class="eyebrow">Price history</p>
+            <h2 id="chart-title" class="chart-title">Loading…</h2>
+            <p id="chart-summary" class="chart-summary"></p>
+          </div>
+          <span id="chart-badge" class="badge badge-large" hidden></span>
         </div>
-        <p id="chart-summary" class="chart-summary"></p>
+        <ul class="legend" aria-label="Legend">
+          <li><span class="key key-lowest" aria-hidden="true"></span>Lowest price of the day</li>
+          <li><span class="key key-normal" aria-hidden="true"></span>Normal price</li>
+        </ul>
         <div class="chart-box">
           <canvas id="history-chart" role="img" aria-label="Price history chart"></canvas>
         </div>
         <p id="chart-note" class="note" hidden></p>
 
         <details class="table-view">
-          <summary>Show all prices as a table</summary>
+          <summary>All prices by store</summary>
           <div class="table-scroll">
             <table>
               <thead>
@@ -60,29 +103,37 @@
           </div>
         </details>
       </div>
-
       <p id="history-status" class="status" role="status" aria-live="polite"></p>
     </section>
 
-    <section class="card" aria-labelledby="search-title">
+    <section aria-labelledby="games-title">
+      <div class="section-head">
+        <h2 id="games-title">Tracked games</h2>
+        <p class="section-hint">Sorted by today's discount</p>
+      </div>
+      <ul id="game-grid" class="game-grid" aria-busy="true"></ul>
+      <p id="games-status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="search-title">
       <h2 id="search-title">Search any game</h2>
+      <p class="section-hint">Current cheapest price on CheapShark. Only tracked games have a price history.</p>
       <form id="search-form" class="search-form" novalidate>
         <div class="field grow">
           <label for="search-input">Game title</label>
-          <input id="search-input" name="title" type="search" minlength="2" required
+          <input id="search-input" name="title" type="search" minlength="2"
                  autocomplete="off" placeholder="e.g. Baldur's Gate">
         </div>
-        <button id="search-button" type="submit">Search</button>
+        <button id="search-button" class="button" type="submit">Search</button>
       </form>
-      <p class="hint">Shows the cheapest current price. Only tracked games have a price history.</p>
       <p id="search-status" class="status" role="status" aria-live="polite"></p>
       <ul id="search-results" class="results"></ul>
     </section>
   </main>
 
-  <footer class="page-footer">
+  <footer class="site-footer">
     <div class="container">
-      Prices from <a href="https://www.cheapshark.com/" rel="noopener">CheapShark</a>. Prices in USD.
+      Prices in USD from <a href="https://www.cheapshark.com/" rel="noopener">CheapShark</a>.
     </div>
   </footer>
 
