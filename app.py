@@ -20,6 +20,9 @@ def fetch_json(endpoint, params):
             params=params,
             timeout=REQUEST_TIMEOUT,
         )
+        if response.status_code == 429:
+            wait_time = response.headers.get("Retry-After", "unknown")
+            sys.exit(f"Rate limited on games (429). Retry after {wait_time} seconds.")
         response.raise_for_status()
     except requests.RequestException as e:
         sys.exit(f"Request to {endpoint} failed: {e}")
