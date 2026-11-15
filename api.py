@@ -1,9 +1,13 @@
 import os
 import sys
+from decimal import Decimal
+from typing import Annotated
 
 import psycopg
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
+
+from app import CheapSharkError, fetch_json
 
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -49,3 +53,24 @@ def get_game_history(game_id: int):
             }
         )
     return history
+
+
+@app.get("/games/search")
+def search_games(title: Annotated[str, Query(min_length=2)]):
+    try:
+        games = fetch_json("games", {"title": title, "limit": 10})
+    except CheapSharkError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    games_list = []
+    for game in games:
+        games_list.append(
+            {
+                "id": int(game["gameID"]),
+                "title": game["external"],
+                "cheapest_price": Decimal(game["cheapest"]),
+                "thumb_url": game["thumb"],
+            }
+        )
+
+    return games_list
