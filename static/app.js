@@ -1,5 +1,6 @@
 // Game Deal Tracker page. It only talks to our own API (api.py):
 //   GET /games, GET /stats, GET /games/{id}/history, GET /games/search?title=
+// URLs are relative, so the page also works when served under a path like /deals/.
 
 // Store names for the ids CheapShark uses (from its /stores endpoint).
 const STORE_NAMES = {
@@ -158,7 +159,7 @@ updateThemeButton();
 
 async function loadStats() {
   try {
-    const stats = await getJson("/stats");
+    const stats = await getJson("stats");
     $("stat-games").textContent = String(stats.games_tracked);
     $("stat-days").textContent = plural(stats.days_collected, "day");
     $("stat-days-since").textContent = stats.first_day
@@ -196,7 +197,7 @@ function byDiscountThenTitle(a, b) {
 async function loadGames() {
   const grid = $("game-grid");
   try {
-    const games = await getJson("/games");
+    const games = await getJson("games");
     state.games = [...games].sort(byDiscountThenTitle);
     state.gamesById = new Map(games.map((game) => [game.id, game]));
     renderGrid();
@@ -303,7 +304,7 @@ async function selectGame(gameId, { scroll }) {
   setStatus($("history-status"), "");
 
   try {
-    const rows = await getJson(`/games/${gameId}/history`);
+    const rows = await getJson(`games/${gameId}/history`);
     if (state.selectedId !== gameId) {
       return; // Another card was clicked while this one was loading.
     }
@@ -566,7 +567,7 @@ $("search-form").addEventListener("submit", async (event) => {
   showSearchSkeleton();
 
   try {
-    const games = await getJson(`/games/search?title=${encodeURIComponent(title)}`);
+    const games = await getJson(`games/search?title=${encodeURIComponent(title)}`);
     renderResults(games);
     setStatus(
       status,
