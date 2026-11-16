@@ -132,7 +132,7 @@ Running `collector.py` again on the same day saves nothing new. Run it once a da
 - [x] Collector with daily, idempotent price history
 - [x] REST API (games, history, stats, search)
 - [x] Web page with price chart, discounts and search
-- [ ] Deploy with a daily cron job
+- [x] Deploy with a daily cron job
 - [ ] Phase 2: user accounts, login (JWT) and a personal watchlist with target prices
 - [ ] Phase 3: Discord alert when a game reaches the target price
 
