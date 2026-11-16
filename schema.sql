@@ -18,4 +18,14 @@ CREATE TABLE IF NOT EXISTS price_history (
     UNIQUE(game_id, store_id, recorded_on)
 );
 
+CREATE TABLE IF NOT EXISTS users (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    username text NOT NULL,
+    password_hash text NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_valid_username
+        CHECK (username ~ '^[a-z0-9_]{3,20}$'),
+    UNIQUE(username)
+);
+
 CREATE INDEX IF NOT EXISTS prices_game_recorded_on ON price_history (game_id, recorded_on);
