@@ -2,12 +2,14 @@ import os
 import sys
 import time
 from decimal import Decimal
+from pwdlib import PasswordHash
 from typing import Annotated
 
 import psycopg
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 from app import CheapSharkError, fetch_json
 
@@ -17,9 +19,15 @@ if not DATABASE_URL:
     sys.exit("DATABASE_URL is not set.")
 
 app = FastAPI()
+password_hasher = PasswordHash.recommended()
 
 GAME_SEARCH_CACHE = {}
 CACHE_SECONDS = 600  # 10 MINUTES
+
+
+class NewUser(BaseModel):
+    username: str = Field(min_length=3, max_length=20, pattern=r"^[a-zA-Z0-9_]+$")
+    password: str = Field(min_length=8, max_length=128)
 
 
 @app.get("/games")
@@ -137,6 +145,23 @@ def search_games(title: Annotated[str, Query(min_length=2)]):
     GAME_SEARCH_CACHE[key] = (time.monotonic(), games_list)
 
     return games_list
+
+
+@app.post("/auth/register", status_code=201)
+def create_user(user: NewUser):
+    username_lower = user.username.lower()
+    hashed = password_hasher.hash(user.password)
+    with psycopg.connect(DATABASE_URL) as conn:
+        row = conn.execute(
+            """
+            INSERT INTO users (username, password_hash)
+            VALUES (%s, %s)
+            RETURNING id, username
+            """,
+            (username_lower, hashed),
+        ).fetchone()
+
+    return {"id": row[0], "username": row[1]}
 
 
 # The website (static/index.html and friends). Mounted last so the API routes above win.
