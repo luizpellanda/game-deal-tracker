@@ -1,6 +1,7 @@
 import os
-import pytest
+
 import psycopg
+import pytest
 
 # pytest runs this file before any test. Point the API at the test database
 # before api.py is imported, so tests never touch the real data.

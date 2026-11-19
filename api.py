@@ -2,13 +2,13 @@ import os
 import sys
 import time
 from decimal import Decimal
-from pwdlib import PasswordHash
 from typing import Annotated
 
 import psycopg
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
+from pwdlib import PasswordHash
 from pydantic import BaseModel, Field
 
 from app import CheapSharkError, fetch_json
