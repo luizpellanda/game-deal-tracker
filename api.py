@@ -30,6 +30,11 @@ class NewUser(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
 
+class LoginUser(BaseModel):
+    username: str
+    password: str = Field(max_length=128)
+
+
 @app.get("/games")
 def get_games():
     with psycopg.connect(DATABASE_URL) as conn:
@@ -163,6 +168,29 @@ def create_user(user: NewUser):
             ).fetchone()
         except psycopg.errors.UniqueViolation:
             raise HTTPException(status_code=409, detail="Username already taken.")
+
+    return {"id": row[0], "username": row[1]}
+
+
+@app.post("/auth/login")
+def login(user: LoginUser):
+    username_lower = user.username.lower()
+    with psycopg.connect(DATABASE_URL) as conn:
+        row = conn.execute(
+            """
+            SELECT id, username, password_hash
+            FROM users
+            WHERE username = %s
+            """,
+            (username_lower,),
+        ).fetchone()
+
+    if row is None:
+        raise HTTPException(status_code=401, detail="Wrong username or password.")
+
+    saved_hash = row[2]
+    if not password_hasher.verify(user.password, saved_hash):
+        raise HTTPException(status_code=401, detail="Wrong username or password.")
 
     return {"id": row[0], "username": row[1]}
 
