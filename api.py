@@ -152,14 +152,17 @@ def create_user(user: NewUser):
     username_lower = user.username.lower()
     hashed = password_hasher.hash(user.password)
     with psycopg.connect(DATABASE_URL) as conn:
-        row = conn.execute(
-            """
-            INSERT INTO users (username, password_hash)
-            VALUES (%s, %s)
-            RETURNING id, username
-            """,
-            (username_lower, hashed),
-        ).fetchone()
+        try:
+            row = conn.execute(
+                """
+                INSERT INTO users (username, password_hash)
+                VALUES (%s, %s)
+                RETURNING id, username
+                """,
+                (username_lower, hashed),
+            ).fetchone()
+        except psycopg.errors.UniqueViolation:
+            raise HTTPException(status_code=409, detail="Username already taken.")
 
     return {"id": row[0], "username": row[1]}
 
