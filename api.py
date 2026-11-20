@@ -1,9 +1,11 @@
 import os
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Annotated
 
+import jwt
 import psycopg
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
@@ -18,11 +20,16 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     sys.exit("DATABASE_URL is not set.")
 
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    sys.exit("SECRET_KEY is not set.")
+
 app = FastAPI()
 password_hasher = PasswordHash.recommended()
 
 GAME_SEARCH_CACHE = {}
-CACHE_SECONDS = 600  # 10 MINUTES
+TOKEN_DAYS = 7
+CACHE_SECONDS = 600  # 10 MINUTES - game cache time
 
 
 class NewUser(BaseModel):
@@ -188,11 +195,20 @@ def login(user: LoginUser):
     if row is None:
         raise HTTPException(status_code=401, detail="Wrong username or password.")
 
+    user_id = row[0]
+    user_name = row[1]
     saved_hash = row[2]
     if not password_hasher.verify(user.password, saved_hash):
         raise HTTPException(status_code=401, detail="Wrong username or password.")
 
-    return {"id": row[0], "username": row[1]}
+    payload = {
+        "sub": str(user_id),
+        "exp": datetime.now(timezone.utc) + timedelta(days=TOKEN_DAYS),
+    }
+
+    token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+
+    return {"id": user_id, "username": user_name, "access_token": token}
 
 
 # The website (static/index.html and friends). Mounted last so the API routes above win.
