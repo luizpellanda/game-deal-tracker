@@ -8,7 +8,7 @@ from typing import Annotated
 import jwt
 import psycopg
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Response, Query
 from fastapi.staticfiles import StaticFiles
 from pwdlib import PasswordHash
 from pydantic import BaseModel, Field
@@ -180,7 +180,7 @@ def create_user(user: NewUser):
 
 
 @app.post("/auth/login")
-def login(user: LoginUser):
+def login(user: LoginUser, response: Response):
     username_lower = user.username.lower()
     with psycopg.connect(DATABASE_URL) as conn:
         row = conn.execute(
@@ -208,7 +208,16 @@ def login(user: LoginUser):
 
     token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
 
-    return {"id": user_id, "username": user_name, "access_token": token}
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        max_age=TOKEN_DAYS * 60 * 60 * 24,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+    )
+
+    return {"id": user_id, "username": user_name}
 
 
 # The website (static/index.html and friends). Mounted last so the API routes above win.
