@@ -27,9 +27,10 @@ if not SECRET_KEY:
 app = FastAPI()
 password_hasher = PasswordHash.recommended()
 
-GAME_SEARCH_CACHE = {}
-TOKEN_DAYS = 7
 CACHE_SECONDS = 600  # 10 MINUTES - game cache time
+GAME_SEARCH_CACHE = {}
+RECRUITER_USERNAME = "recruiter"
+TOKEN_DAYS = 7
 
 
 class NewUser(BaseModel):
@@ -39,6 +40,10 @@ class NewUser(BaseModel):
 
 class LoginUser(BaseModel):
     username: str
+    password: str = Field(max_length=128)
+
+
+class DeleteUser(BaseModel):
     password: str = Field(max_length=128)
 
 
@@ -220,8 +225,8 @@ def login(user: LoginUser, response: Response):
     return {"id": user_id, "username": user_name}
 
 
-@app.get("/auth/me")
-def get_me(access_token: Annotated[str | None, Cookie()] = None):
+def get_current_user(access_token):
+    """Return the logged-in user as {"id", "username"}, or raise 401."""
     if access_token is None:
         raise HTTPException(status_code=401, detail="Not logged in.")
 
@@ -247,6 +252,11 @@ def get_me(access_token: Annotated[str | None, Cookie()] = None):
     return {"id": row[0], "username": row[1]}
 
 
+@app.get("/auth/me")
+def get_me(access_token: Annotated[str | None, Cookie()] = None):
+    return get_current_user(access_token)
+
+
 @app.post("/auth/logout")
 def logout(response: Response):
     response.delete_cookie(
@@ -257,6 +267,56 @@ def logout(response: Response):
     )
 
     return {"detail": "Logged out."}
+
+
+@app.post("/auth/delete-account")
+def delete_user(
+    body: DeleteUser,
+    response: Response,
+    access_token: Annotated[str | None, Cookie()] = None,
+):
+    user = get_current_user(access_token)
+    user_id = user["id"]
+    username = user["username"]
+
+    if username == RECRUITER_USERNAME:
+        raise HTTPException(
+            status_code=403,
+            detail="No. Not cool. Please leave the recruiter account alone.",
+        )
+
+    with psycopg.connect(DATABASE_URL) as conn:
+        row = conn.execute(
+            """
+                SELECT password_hash
+                FROM users
+                WHERE id = %s
+                """,
+            (user_id,),
+        ).fetchone()
+
+    saved_hash = row[0]
+
+    if not password_hasher.verify(body.password, saved_hash):
+        raise HTTPException(status_code=401, detail="Wrong password.")
+
+    with psycopg.connect(DATABASE_URL) as conn:
+        conn.execute(
+            """
+                DELETE FROM users
+                WHERE id = %s
+                """,
+            (user_id,),
+        )
+
+    response.delete_cookie(
+        key="access_token",
+        httponly=True,
+        secure=True,
+        samesite="lax",
+    )
+
+    return {"detail": "Account deleted."}
 
 
 # The website (static/index.html and friends). Mounted last so the API routes above win.
