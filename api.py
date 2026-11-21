@@ -8,7 +8,7 @@ from typing import Annotated
 import jwt
 import psycopg
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Response, Query
+from fastapi import Cookie, FastAPI, HTTPException, Query, Response
 from fastapi.staticfiles import StaticFiles
 from pwdlib import PasswordHash
 from pydantic import BaseModel, Field
@@ -218,6 +218,33 @@ def login(user: LoginUser, response: Response):
     )
 
     return {"id": user_id, "username": user_name}
+
+
+@app.get("/auth/me")
+def get_me(access_token: Annotated[str | None, Cookie()] = None):
+    if access_token is None:
+        raise HTTPException(status_code=401, detail="Not logged in.")
+
+    try:
+        payload = jwt.decode(access_token, SECRET_KEY, algorithms=["HS256"])
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Not logged in.")
+
+    user_id = int(payload["sub"])
+    with psycopg.connect(DATABASE_URL) as conn:
+        row = conn.execute(
+            """
+            SELECT id, username
+            FROM users
+            WHERE id = %s
+            """,
+            (user_id,),
+        ).fetchone()
+
+    if row is None:
+        raise HTTPException(status_code=401, detail="Not logged in.")
+
+    return {"id": row[0], "username": row[1]}
 
 
 # The website (static/index.html and friends). Mounted last so the API routes above win.
