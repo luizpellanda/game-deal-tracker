@@ -247,5 +247,17 @@ def get_me(access_token: Annotated[str | None, Cookie()] = None):
     return {"id": row[0], "username": row[1]}
 
 
+@app.post("/auth/logout")
+def logout(response: Response):
+    response.delete_cookie(
+        key="access_token",
+        httponly=True,
+        secure=True,
+        samesite="lax",
+    )
+
+    return {"detail": "Logged out."}
+
+
 # The website (static/index.html and friends). Mounted last so the API routes above win.
 app.mount("/", StaticFiles(directory="static", html=True), name="site")
