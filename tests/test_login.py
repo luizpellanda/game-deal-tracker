@@ -2,6 +2,8 @@ import jwt
 from fastapi.testclient import TestClient
 
 import api
+import auth
+import config
 
 client = TestClient(api.app)
 
@@ -94,7 +96,7 @@ def test_correct_login_creates_cookie(clear_users):
 
     # The token belongs to this user
     token = login.cookies["access_token"]
-    payload = jwt.decode(token, api.SECRET_KEY, algorithms=["HS256"])
+    payload = jwt.decode(token, config.SECRET_KEY, algorithms=["HS256"])
     assert payload["sub"] == str(login.json()["id"])
 
 
@@ -121,7 +123,7 @@ def test_cookie_security_verification(clear_users):
     assert "HttpOnly" in cookie
     assert "Secure" in cookie
     assert "SameSite=lax" in cookie
-    assert f"Max-Age={api.TOKEN_DAYS * 60 * 60 * 24}" in cookie
+    assert f"Max-Age={auth.TOKEN_DAYS * 60 * 60 * 24}" in cookie
 
 
 def test_incorrect_login_does_not_create_cookie(clear_users):

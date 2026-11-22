@@ -1,11 +1,11 @@
 import time
 
-import api
+import auth
 
 
 def test_sixth_account_from_same_ip_returns_429(clear_users, client):
     # Create 5 accounts from the same ip: all work
-    for number in range(api.REGISTER_MAX_ACCOUNTS):
+    for number in range(auth.REGISTER_MAX_ACCOUNTS):
         register = client.post(
             "/auth/register",
             json={"username": f"test{number}", "password": "pass12345"},
@@ -30,7 +30,7 @@ def test_failed_registers_do_not_count(clear_users, client):
     assert register.status_code == 201
 
     # Try the same name 5 times: refused with 409, no account created
-    for _ in range(api.REGISTER_MAX_ACCOUNTS):
+    for _ in range(auth.REGISTER_MAX_ACCOUNTS):
         register_same_name = client.post(
             "/auth/register",
             json={"username": "test1", "password": "pass12345"},
@@ -47,8 +47,8 @@ def test_failed_registers_do_not_count(clear_users, client):
 
 def test_old_accounts_expire_after_the_window(clear_users, client):
     # Pretend this ip created 5 accounts, 1 minute BEFORE the window started
-    old_time = time.time() - api.REGISTER_WINDOW_SECONDS - 60
-    api.REGISTER_TIMES["testclient"] = [old_time] * api.REGISTER_MAX_ACCOUNTS
+    old_time = time.time() - auth.REGISTER_WINDOW_SECONDS - 60
+    auth.REGISTER_TIMES["testclient"] = [old_time] * auth.REGISTER_MAX_ACCOUNTS
 
     # Create a new account: works, the old ones no longer count
     register = client.post(
@@ -58,4 +58,4 @@ def test_old_accounts_expire_after_the_window(clear_users, client):
     assert register.status_code == 201
 
     # Only the new account is in the list now
-    assert len(api.REGISTER_TIMES["testclient"]) == 1
+    assert len(auth.REGISTER_TIMES["testclient"]) == 1

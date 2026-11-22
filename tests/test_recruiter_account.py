@@ -3,7 +3,7 @@ import os
 import psycopg
 import pytest
 
-import api
+import auth
 import seed_recruiter
 
 
@@ -11,7 +11,7 @@ def count_recruiter_accounts():
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
         row = conn.execute(
             "SELECT COUNT(*) FROM users WHERE username = %s",
-            (api.RECRUITER_USERNAME,),
+            (auth.RECRUITER_USERNAME,),
         ).fetchone()
     return row[0]
 
@@ -33,7 +33,7 @@ def test_recruiter_can_log_in_with_the_env_password(clear_users, client):
     login = client.post(
         "/auth/login",
         json={
-            "username": api.RECRUITER_USERNAME,
+            "username": auth.RECRUITER_USERNAME,
             "password": seed_recruiter.RECRUITER_PASSWORD,
         },
     )

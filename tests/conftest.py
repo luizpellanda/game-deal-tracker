@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 os.environ["DATABASE_URL"] = "postgresql:///game_deals_test"
 
 import api  # must come after the line above, so api.py uses the test database
+import auth
 
 
 @pytest.fixture
@@ -24,5 +25,5 @@ def client():
 
 @pytest.fixture(autouse=True)
 def clear_ip_limits():
-    api.FAILED_LOGIN_TIMES.clear()
-    api.REGISTER_TIMES.clear()
+    auth.FAILED_LOGIN_TIMES.clear()
+    auth.REGISTER_TIMES.clear()

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import jwt
 import psycopg
 
-import api
+import config
 
 
 def test_me_after_login_returns_user_returns_200(clear_users, client):
@@ -76,7 +76,7 @@ def test_me_with_expired_token_returns_401(clear_users, client):
             "sub": str(register.json()["id"]),
             "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
         },
-        api.SECRET_KEY,
+        config.SECRET_KEY,
         algorithm="HS256",
     )
     client.cookies.set("access_token", expired)

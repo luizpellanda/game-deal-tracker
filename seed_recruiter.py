@@ -4,7 +4,7 @@ import sys
 import psycopg
 from dotenv import load_dotenv
 
-from api import RECRUITER_USERNAME, password_hasher
+from auth import RECRUITER_USERNAME, password_hasher
 
 load_dotenv()
 

@@ -1,4 +1,4 @@
-import api
+import auth
 import seed_recruiter
 
 
@@ -89,7 +89,7 @@ def test_impossible_of_deleting_recruiter_account(clear_users, client):
     login = client.post(
         "/auth/login",
         json={
-            "username": api.RECRUITER_USERNAME,
+            "username": auth.RECRUITER_USERNAME,
             "password": seed_recruiter.RECRUITER_PASSWORD,
         },
     )
@@ -111,7 +111,7 @@ def test_impossible_of_deleting_recruiter_account(clear_users, client):
     login_after_403 = client.post(
         "/auth/login",
         json={
-            "username": api.RECRUITER_USERNAME,
+            "username": auth.RECRUITER_USERNAME,
             "password": seed_recruiter.RECRUITER_PASSWORD,
         },
     )
