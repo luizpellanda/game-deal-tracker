@@ -20,3 +20,9 @@ def clear_users():
 @pytest.fixture
 def client():
     return TestClient(api.app, base_url="https://testserver")
+
+
+@pytest.fixture(autouse=True)
+def clear_ip_limits():
+    api.FAILED_LOGIN_TIMES.clear()
+    api.REGISTER_TIMES.clear()

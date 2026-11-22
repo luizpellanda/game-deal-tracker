@@ -8,7 +8,7 @@ from typing import Annotated
 import jwt
 import psycopg
 from dotenv import load_dotenv
-from fastapi import Cookie, FastAPI, HTTPException, Query, Response
+from fastapi import Cookie, FastAPI, HTTPException, Query, Request, Response
 from fastapi.staticfiles import StaticFiles
 from pwdlib import PasswordHash
 from pydantic import BaseModel, Field
@@ -29,7 +29,17 @@ password_hasher = PasswordHash.recommended()
 
 CACHE_SECONDS = 600  # 10 MINUTES - game cache time
 GAME_SEARCH_CACHE = {}
+
+FAILED_LOGIN_TIMES = {}
+LOGIN_MAX_FAILURES = 5
+LOGIN_WINDOW_SECONDS = 15 * 60  # 15 MINUTES
+
+REGISTER_MAX_ACCOUNTS = 5
+REGISTER_TIMES = {}
+REGISTER_WINDOW_SECONDS = 60 * 60  # 1 HOUR
+
 RECRUITER_USERNAME = "recruiter"
+
 TOKEN_DAYS = 7
 
 
@@ -164,10 +174,29 @@ def search_games(title: Annotated[str, Query(min_length=2)]):
     return games_list
 
 
+def recent_times(times_by_ip, ip, window_seconds):
+    """Drop the old times of this ip and return the ones still inside the window."""
+    now = time.time()
+    recent = [t for t in times_by_ip.get(ip, []) if now - t < window_seconds]
+    times_by_ip[ip] = recent
+    return recent
+
+
 @app.post("/auth/register", status_code=201)
-def create_user(user: NewUser):
+def create_user(user: NewUser, request: Request):
+    ip = request.client.host
+
+    if (
+        len(recent_times(REGISTER_TIMES, ip, REGISTER_WINDOW_SECONDS))
+        >= REGISTER_MAX_ACCOUNTS
+    ):
+        raise HTTPException(
+            status_code=429, detail="Too many accounts created. Try again later."
+        )
+
     username_lower = user.username.lower()
     hashed = password_hasher.hash(user.password)
+
     with psycopg.connect(DATABASE_URL) as conn:
         try:
             row = conn.execute(
@@ -181,12 +210,24 @@ def create_user(user: NewUser):
         except psycopg.errors.UniqueViolation:
             raise HTTPException(status_code=409, detail="Username already taken.")
 
+    REGISTER_TIMES[ip].append(time.time())
+
     return {"id": row[0], "username": row[1]}
 
 
 @app.post("/auth/login")
-def login(user: LoginUser, response: Response):
+def login(user: LoginUser, response: Response, request: Request):
     username_lower = user.username.lower()
+    ip = request.client.host
+
+    if (
+        len(recent_times(FAILED_LOGIN_TIMES, ip, LOGIN_WINDOW_SECONDS))
+        >= LOGIN_MAX_FAILURES
+    ):
+        raise HTTPException(
+            status_code=429, detail="Too many login attempts. Try again later."
+        )
+
     with psycopg.connect(DATABASE_URL) as conn:
         row = conn.execute(
             """
@@ -198,12 +239,14 @@ def login(user: LoginUser, response: Response):
         ).fetchone()
 
     if row is None:
+        FAILED_LOGIN_TIMES[ip].append(time.time())
         raise HTTPException(status_code=401, detail="Wrong username or password.")
 
     user_id = row[0]
     user_name = row[1]
     saved_hash = row[2]
     if not password_hasher.verify(user.password, saved_hash):
+        FAILED_LOGIN_TIMES[ip].append(time.time())
         raise HTTPException(status_code=401, detail="Wrong username or password.")
 
     payload = {
