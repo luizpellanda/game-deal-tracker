@@ -1,3 +1,7 @@
+import api
+import seed_recruiter
+
+
 def test_delete_function_deletes_account(clear_users, client):
     # Create the account
     register = client.post(
@@ -78,23 +82,23 @@ def test_delete_function_with_incorrect_password(clear_users, client):
 
 
 def test_impossible_of_deleting_recruiter_account(clear_users, client):
-    # Create the recruiter account
-    register = client.post(
-        "/auth/register",
-        json={"username": "recruiter", "password": "pass123456"},
-    )
-    assert register.status_code == 201
+    # Create the recruiter account with the script (the register endpoint refuses this name)
+    seed_recruiter.ensure_recruiter()
 
     # Log in as the recruiter
     login = client.post(
         "/auth/login",
-        json={"username": "recruiter", "password": "pass123456"},
+        json={
+            "username": api.RECRUITER_USERNAME,
+            "password": seed_recruiter.RECRUITER_PASSWORD,
+        },
     )
     assert login.status_code == 200
 
     # Try to delete with the right password: forbidden
     delete_account = client.post(
-        "/auth/delete-account", json={"password": "pass123456"}
+        "/auth/delete-account",
+        json={"password": seed_recruiter.RECRUITER_PASSWORD},
     )
 
     assert delete_account.status_code == 403
@@ -106,7 +110,10 @@ def test_impossible_of_deleting_recruiter_account(clear_users, client):
     # Log in again: works, the recruiter account still exists
     login_after_403 = client.post(
         "/auth/login",
-        json={"username": "recruiter", "password": "pass123456"},
+        json={
+            "username": api.RECRUITER_USERNAME,
+            "password": seed_recruiter.RECRUITER_PASSWORD,
+        },
     )
     assert login_after_403.status_code == 200
 

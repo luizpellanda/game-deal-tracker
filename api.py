@@ -195,6 +195,10 @@ def create_user(user: NewUser, request: Request):
         )
 
     username_lower = user.username.lower()
+
+    if username_lower == RECRUITER_USERNAME:
+        raise HTTPException(status_code=409, detail="Username already taken.")
+
     hashed = password_hasher.hash(user.password)
 
     with psycopg.connect(DATABASE_URL) as conn:
@@ -208,7 +212,7 @@ def create_user(user: NewUser, request: Request):
                 (username_lower, hashed),
             ).fetchone()
         except psycopg.errors.UniqueViolation:
-            raise HTTPException(status_code=409, detail="Username already taken.")
+            raise HTTPException(status_code=409, detail=" already taken.")
 
     REGISTER_TIMES[ip].append(time.time())
 
