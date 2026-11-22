@@ -28,4 +28,20 @@ CREATE TABLE IF NOT EXISTS users (
     UNIQUE(username)
 );
 
+CREATE TABLE IF NOT EXISTS watchlist (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    game_id INTEGER NOT NULL,
+    target_price NUMERIC(10,2),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_valid_target_price
+        CHECK (target_price > 0 AND target_price <= 1000),
+    CONSTRAINT fk_watchlist_user
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_watchlist_game
+        FOREIGN KEY (game_id) REFERENCES games (id),
+    CONSTRAINT uq_user_game
+        UNIQUE (user_id, game_id)
+);
+
 CREATE INDEX IF NOT EXISTS prices_game_recorded_on ON price_history (game_id, recorded_on);
