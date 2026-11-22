@@ -1,5 +1,5 @@
-// Game Deal Tracker page. It only talks to our own API (api.py):
-//   GET /games, GET /stats, GET /games/{id}/history, GET /games/search?title=
+// Landing page. It only talks to our own API (api.py):
+//   GET /games, GET /games/{id}/history, POST /auth/login (recruiter button)
 // URLs are relative, so the page also works when served under a path like /deals/.
 
 // Store names for the ids CheapShark uses (from its /stores endpoint).
@@ -19,17 +19,14 @@ const STORE_NAMES = {
   35: "DreamGame",
 };
 
+const TOP_COUNT = 10;
+
 const $ = (id) => document.getElementById(id);
-
-const SEARCH_COOLDOWN_MS = 2000;
-
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-const darkScheme = window.matchMedia("(prefers-color-scheme: dark)");
 
 const state = {
   games: [],
-  gamesById: new Map(),
   selectedId: null,
   history: null,
   chart: null,
@@ -53,15 +50,6 @@ function formatDate(isoDate, withYear = true) {
   return date.toLocaleDateString("en-US", options);
 }
 
-function plural(count, word) {
-  return `${count} ${word}${count === 1 ? "" : "s"}`;
-}
-
-function setStatus(element, text, isError = false) {
-  element.textContent = text;
-  element.classList.toggle("error", isError);
-}
-
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) {
@@ -73,119 +61,36 @@ function el(tag, className, text) {
   return node;
 }
 
-function thumbnail(url, width) {
-  const wrap = el("div", "thumb-wrap");
-  const image = el("img", "thumb");
-  image.alt = "";
-  image.loading = "lazy";
-  image.decoding = "async";
-  image.width = width;
-  image.height = Math.round((width * 87) / 231);
-  // Some store CDNs refuse to serve images to other sites; keep the gray tile then.
-  image.addEventListener("error", () => image.classList.add("broken"), { once: true });
-  if (url) {
-    image.src = url;
-  } else {
-    image.classList.add("broken");
-  }
-  wrap.append(image);
-  return wrap;
+function setStatus(element, text, isError = false) {
+  element.textContent = text;
+  element.classList.toggle("error", isError);
 }
 
-function discountBadge(percent) {
-  const badge = el("span", "badge", `−${percent}%`);
-  badge.setAttribute("aria-label", `${percent} percent off`);
-  return badge;
+// CheapShark gives small Steam capsules (231 x 87). For Steam games, ask Steam
+// for the 460 px header image instead, so the big card cover stays sharp.
+function coverUrl(thumbUrl) {
+  if (!thumbUrl) {
+    return "";
+  }
+  return thumbUrl.replace(/capsule_(sm_120|231x87)\.jpg/, "header.jpg");
 }
 
 async function getJson(url) {
   const response = await fetch(url);
   if (!response.ok) {
-    let detail = `Request failed (${response.status})`;
-    try {
-      const body = await response.json();
-      if (typeof body.detail === "string") {
-        detail = body.detail;
-      }
-    } catch {
-      // Body was not JSON; keep the generic message.
-    }
-    const error = new Error(detail);
+    const error = new Error(`Request failed (${response.status})`);
     error.status = response.status;
     throw error;
   }
   return response.json();
 }
 
-// ---------------------------------------------------------------------------
-// Theme
-// ---------------------------------------------------------------------------
-
-function currentTheme() {
-  const forced = document.documentElement.dataset.theme;
-  if (forced === "light" || forced === "dark") {
-    return forced;
-  }
-  return darkScheme.matches ? "dark" : "light";
-}
-
-function updateThemeButton() {
-  const next = currentTheme() === "dark" ? "light" : "dark";
-  $("theme-toggle").setAttribute("aria-label", `Switch to ${next} theme`);
-}
-
-$("theme-toggle").addEventListener("click", () => {
-  const next = currentTheme() === "dark" ? "light" : "dark";
-  document.documentElement.dataset.theme = next;
-  try {
-    localStorage.setItem("theme", next);
-  } catch {
-    // Storage blocked: the choice lasts until the page is closed.
-  }
-  updateThemeButton();
-  renderChart();
-});
-
-darkScheme.addEventListener("change", () => {
-  updateThemeButton();
-  renderChart();
-});
-
-updateThemeButton();
-
-// ---------------------------------------------------------------------------
-// Stats
-// ---------------------------------------------------------------------------
-
-async function loadStats() {
-  try {
-    const stats = await getJson("stats");
-    $("stat-games").textContent = String(stats.games_tracked);
-    $("stat-days").textContent = plural(stats.days_collected, "day");
-    $("stat-days-since").textContent = stats.first_day
-      ? `since ${formatDate(stats.first_day)}`
-      : "starts after the first collection";
-  } catch {
-    $("stat-days-since").textContent = "unavailable";
-  }
-}
-
-function renderBiggestDiscount() {
-  const best = state.games
-    .filter((game) => game.discount_percent !== null)
-    .sort((a, b) => b.discount_percent - a.discount_percent)[0];
-
-  if (best && best.discount_percent > 0) {
-    $("stat-discount").textContent = `−${best.discount_percent}%`;
-    $("stat-discount-game").textContent = best.title;
-  } else {
-    $("stat-discount").textContent = "–";
-    $("stat-discount-game").textContent = "no discounts today";
-  }
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
 // ---------------------------------------------------------------------------
-// Tracked games grid
+// Deal cards
 // ---------------------------------------------------------------------------
 
 function byDiscountThenTitle(a, b) {
@@ -194,67 +99,117 @@ function byDiscountThenTitle(a, b) {
   return db - da || a.title.localeCompare(b.title);
 }
 
-async function loadGames() {
-  const grid = $("game-grid");
+function dealCard(game) {
+  const card = el("button", "deal-card");
+  card.type = "button";
+  card.dataset.id = String(game.id);
+  card.setAttribute("aria-pressed", "false");
+
+  const cover = el("div", "deal-cover");
+  const image = el("img");
+  image.alt = "";
+  image.loading = "lazy";
+  image.decoding = "async";
+  image.width = 460;
+  image.height = 215;
+  image.addEventListener("error", () => {
+    // header.jpg missing: fall back to the original small image, then to the plain tile.
+    if (image.dataset.fallback !== "done" && game.thumb_url && image.src !== game.thumb_url) {
+      image.dataset.fallback = "done";
+      image.src = game.thumb_url;
+    } else {
+      image.classList.add("broken");
+    }
+  });
+  const src = coverUrl(game.thumb_url);
+  if (src) {
+    image.src = src;
+  } else {
+    image.classList.add("broken");
+  }
+  cover.append(image);
+
+  if (game.discount_percent > 0) {
+    const off = el("span", "deal-off", `−${game.discount_percent}%`);
+    off.setAttribute("aria-label", `${game.discount_percent} percent off`);
+    cover.append(off);
+  } else if (game.lowest_price !== null) {
+    cover.append(el("span", "deal-off none", "Full price"));
+  }
+
+  const body = el("div", "deal-body");
+  body.append(el("span", "deal-title", game.title));
+  const prices = el("div", "deal-prices");
+  if (game.lowest_price === null) {
+    prices.append(el("span", "price-none", "No price yet"));
+  } else {
+    prices.append(el("span", "price-now", money.format(game.lowest_price)));
+    if (game.discount_percent > 0) {
+      const was = el("span", "price-was", money.format(game.normal_price));
+      was.setAttribute("aria-label", `normally ${money.format(game.normal_price)}`);
+      prices.append(was);
+    }
+  }
+  body.append(prices);
+
+  card.append(cover, body);
+  card.addEventListener("click", () => selectGame(game.id));
+  return card;
+}
+
+function showSkeleton() {
+  const grid = $("deal-grid");
+  grid.replaceChildren();
+  for (let i = 0; i < 4; i += 1) {
+    const item = el("li", "deal-card skeleton");
+    item.setAttribute("aria-hidden", "true");
+    const body = el("div", "deal-body");
+    const long = el("span", "bar");
+    long.style.width = "70%";
+    const short = el("span", "bar");
+    short.style.width = "35%";
+    body.append(long, short);
+    item.append(el("div", "deal-cover"), body);
+    grid.append(item);
+  }
+}
+
+async function loadDeals() {
+  const grid = $("deal-grid");
+  showSkeleton();
   try {
     const games = await getJson("games");
-    state.games = [...games].sort(byDiscountThenTitle);
-    state.gamesById = new Map(games.map((game) => [game.id, game]));
-    renderGrid();
-    renderBiggestDiscount();
+    state.games = games
+      .filter((game) => game.lowest_price !== null)
+      .sort(byDiscountThenTitle)
+      .slice(0, TOP_COUNT);
 
-    if (state.games.length > 0) {
-      selectGame(state.games[0].id, { scroll: false });
-    } else {
-      setStatus($("games-status"), "No tracked games yet.");
-      $("chart-area").hidden = true;
-      setStatus($("history-status"), "Add games with the seed script to see prices here.");
+    grid.replaceChildren();
+    if (state.games.length === 0) {
+      setStatus($("deals-status"), "No prices collected yet. They appear after the first daily collection.");
+      return;
     }
-  } catch (error) {
-    setStatus($("games-status"), `Could not load tracked games: ${error.message}`, true);
-    $("chart-area").hidden = true;
-    setStatus($("history-status"), "Price history is unavailable right now.", true);
+
+    for (const game of state.games) {
+      const item = el("li");
+      item.append(dealCard(game));
+      grid.append(item);
+    }
+
+    // The biggest discount also gets the big card in the hero.
+    const best = state.games[0];
+    const hero = $("hero-deal");
+    hero.replaceChildren(dealCard(best), el("p", "hero-caption", "Biggest discount today"));
+  } catch {
+    grid.replaceChildren();
+    setStatus($("deals-status"), "Could not load today's deals. Please try again in a minute.", true);
   } finally {
     grid.setAttribute("aria-busy", "false");
   }
 }
 
-function renderGrid() {
-  const grid = $("game-grid");
-  grid.replaceChildren();
-
-  for (const game of state.games) {
-    const item = el("li");
-    const card = el("button", "game-card");
-    card.type = "button";
-    card.dataset.id = String(game.id);
-    card.setAttribute("aria-pressed", "false");
-
-    const body = el("div", "card-body");
-    body.append(el("span", "card-title", game.title));
-
-    const prices = el("div", "card-prices");
-    if (game.lowest_price === null) {
-      prices.append(el("span", "price-none", "No price yet"));
-    } else {
-      prices.append(el("span", "price-now", money.format(game.lowest_price)));
-      if (game.discount_percent > 0) {
-        const was = el("span", "price-was", money.format(game.normal_price));
-        was.setAttribute("aria-label", `normally ${money.format(game.normal_price)}`);
-        prices.append(was, discountBadge(game.discount_percent));
-      }
-    }
-    body.append(prices);
-
-    card.append(thumbnail(game.thumb_url, 231), body);
-    card.addEventListener("click", () => selectGame(game.id, { scroll: true }));
-    item.append(card);
-    grid.append(item);
-  }
-}
-
-function markSelectedCard() {
-  for (const card of document.querySelectorAll(".game-card")) {
+function markSelectedCards() {
+  for (const card of document.querySelectorAll(".deal-card[data-id]")) {
     card.setAttribute("aria-pressed", String(card.dataset.id === String(state.selectedId)));
   }
 }
@@ -286,29 +241,30 @@ function groupByDay(rows) {
   return [...days.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
-async function selectGame(gameId, { scroll }) {
+async function selectGame(gameId) {
   state.selectedId = gameId;
-  markSelectedCard();
+  markSelectedCards();
 
-  const game = state.gamesById.get(gameId);
-  const title = game ? game.title : "";
-  const panel = $("history-panel");
-  const area = $("chart-area");
+  const game = state.games.find((item) => item.id === gameId);
+  const panel = $("history");
+  const area = $("history-chart-area");
 
-  if (scroll) {
-    panel.scrollIntoView({ behavior: reducedMotion.matches ? "auto" : "smooth", block: "start" });
-    panel.focus({ preventScroll: true });
-  }
-
-  area.style.opacity = "0.5";
+  panel.hidden = false;
+  $("history-title").textContent = game ? game.title : "";
+  $("history-summary").textContent = "";
+  $("history-pill").hidden = true;
   setStatus($("history-status"), "");
+  area.style.opacity = "0.5";
+
+  panel.scrollIntoView({ behavior: reducedMotion.matches ? "auto" : "smooth", block: "start" });
+  panel.focus({ preventScroll: true });
 
   try {
     const rows = await getJson(`games/${gameId}/history`);
     if (state.selectedId !== gameId) {
       return; // Another card was clicked while this one was loading.
     }
-    state.history = { game, title, rows, days: groupByDay(rows) };
+    state.history = { game, rows, days: groupByDay(rows) };
     area.hidden = false;
     renderHistory();
   } catch (error) {
@@ -317,8 +273,8 @@ async function selectGame(gameId, { scroll }) {
     }
     area.hidden = true;
     const message = error.status === 404
-      ? `No prices collected for ${title} yet. They appear after the next daily collection.`
-      : `Could not load the price history: ${error.message}`;
+      ? "No prices collected for this game yet. They appear after the next daily collection."
+      : "Could not load the price history. Please try again in a minute.";
     setStatus($("history-status"), message, error.status !== 404);
   } finally {
     area.style.opacity = "";
@@ -326,34 +282,24 @@ async function selectGame(gameId, { scroll }) {
 }
 
 function renderHistory() {
-  const { game, title, rows, days } = state.history;
+  const { game, rows, days } = state.history;
   const latest = days[days.length - 1];
 
-  $("chart-title").textContent = title;
-
-  $("chart-summary").replaceChildren(
+  $("history-summary").replaceChildren(
     "Lowest today ",
     el("strong", "", money.format(latest.lowest)),
     ` at ${storeName(latest.store)}, normally ${money.format(latest.normal)}.`,
   );
 
-  const badge = $("chart-badge");
-  const percent = game ? game.discount_percent : null;
-  if (percent > 0) {
-    badge.textContent = `−${percent}% today`;
-    badge.setAttribute("aria-label", `${percent} percent off today`);
-    badge.hidden = false;
-  } else {
-    badge.hidden = true;
+  const pill = $("history-pill");
+  if (game && game.discount_percent > 0) {
+    pill.textContent = `−${game.discount_percent}% today`;
+    pill.hidden = false;
   }
 
-  const note = $("chart-note");
-  if (days.length === 1) {
-    note.textContent = "Only one day collected so far. The line grows as the daily collector runs.";
-    note.hidden = false;
-  } else {
-    note.hidden = true;
-  }
+  const note = $("history-note");
+  note.hidden = days.length > 1;
+  note.textContent = "Only one day collected so far. The line grows as the daily collector runs.";
 
   renderTable(rows);
   renderChart();
@@ -377,12 +323,10 @@ function renderTable(rows) {
   for (const row of sorted) {
     const isCheapest = row.sale_price === cheapestByDay.get(row.recorded_on);
     const tr = el("tr", isCheapest ? "cheapest" : "");
-
     const store = el("td", "", storeName(row.store_id));
     if (isCheapest) {
-      store.append(el("span", "badge tag-cheapest", "Cheapest"));
+      store.append(el("span", "tag", "Cheapest"));
     }
-
     tr.append(
       el("td", "", formatDate(row.recorded_on)),
       store,
@@ -391,14 +335,6 @@ function renderTable(rows) {
     );
     body.append(tr);
   }
-}
-
-// ---------------------------------------------------------------------------
-// Chart
-// ---------------------------------------------------------------------------
-
-function cssVar(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
 // Vertical hairline that follows the hovered day.
@@ -423,7 +359,7 @@ const crosshair = {
 };
 
 function renderChart() {
-  if (!state.history) {
+  if (!state.history || typeof Chart === "undefined") {
     return;
   }
   const { days } = state.history;
@@ -437,16 +373,18 @@ function renderChart() {
     primary: cssVar("--text-primary"),
     secondary: cssVar("--text-secondary"),
   };
+  const mono = cssVar("--font-mono");
 
-  const line = (label, values, color) => ({
+  const line = (label, values, color, dashed) => ({
     label,
     data: values,
     borderColor: color,
     backgroundColor: color,
     borderWidth: 2,
+    borderDash: dashed ? [6, 4] : [],
     borderCapStyle: "round",
     borderJoinStyle: "round",
-    pointRadius: 4,
+    pointRadius: dashed ? 0 : 4,
     pointHoverRadius: 6,
     pointBorderWidth: 2,
     pointBorderColor: colors.surface,
@@ -457,8 +395,8 @@ function renderChart() {
   const data = {
     labels: days.map((day) => formatDate(day.date, false)),
     datasets: [
-      line("Lowest price", days.map((day) => day.lowest), colors.lowest),
-      line("Normal price", days.map((day) => day.normal), colors.normal),
+      line("Lowest price", days.map((day) => day.lowest), colors.lowest, false),
+      line("Normal price", days.map((day) => day.normal), colors.normal, true),
     ],
   };
 
@@ -473,13 +411,17 @@ function renderChart() {
         offset: true,
         grid: { display: false },
         border: { color: colors.axis },
-        ticks: { color: colors.muted, maxRotation: 0, autoSkip: true },
+        ticks: { color: colors.muted, maxRotation: 0, autoSkip: true, font: { family: mono } },
       },
       y: {
         beginAtZero: true,
         grid: { color: colors.grid },
         border: { display: false },
-        ticks: { color: colors.muted, callback: (value) => money.format(value) },
+        ticks: {
+          color: colors.muted,
+          font: { family: mono },
+          callback: (value) => money.format(value),
+        },
       },
     },
     plugins: {
@@ -493,6 +435,7 @@ function renderChart() {
         padding: 10,
         boxWidth: 12,
         boxHeight: 2,
+        bodyFont: { family: mono },
         callbacks: {
           title(items) {
             return formatDate(days[items[0].dataIndex].date);
@@ -528,99 +471,66 @@ function renderChart() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Search (only on submit, so typing never spends CheapShark calls)
-// ---------------------------------------------------------------------------
-
-function showSearchSkeleton() {
-  const results = $("search-results");
-  results.replaceChildren();
-  for (let i = 0; i < 3; i += 1) {
-    const item = el("li", "result skeleton");
-    item.setAttribute("aria-hidden", "true");
-    const text = el("div", "result-text");
-    const long = el("span", "bar");
-    long.style.width = "60%";
-    const short = el("span", "bar");
-    short.style.width = "30%";
-    text.append(long, short);
-    item.append(el("div", "skeleton-thumb"), text);
-    results.append(item);
-  }
-}
-
-$("search-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const input = $("search-input");
-  const button = $("search-button");
-  const status = $("search-status");
-  const title = input.value.trim();
-
-  if (title.length < 2) {
-    setStatus(status, "Type at least 2 characters.", true);
-    input.focus();
-    return;
-  }
-
-  button.disabled = true;
-  setStatus(status, "Searching…");
-  showSearchSkeleton();
-
-  try {
-    const games = await getJson(`games/search?title=${encodeURIComponent(title)}`);
-    renderResults(games);
-    setStatus(
-      status,
-      games.length === 0 ? `No games found for "${title}".` : `${plural(games.length, "result")}.`,
-    );
-  } catch (error) {
-    $("search-results").replaceChildren();
-    const message = error.status === 502
-      ? "CheapShark is not answering right now. Try again in a few minutes."
-      : `Search failed: ${error.message}`;
-    setStatus(status, message, true);
-  } finally {
-    // Short cooldown so repeated clicks can't flood the API.
-    setTimeout(() => {
-      button.disabled = false;
-    }, SEARCH_COOLDOWN_MS);
-  }
+// Redraw the chart in the new colors when the theme changes (event from site.js).
+document.addEventListener("themechange", () => {
+  // Wait one frame so the new CSS colors are applied before reading them.
+  requestAnimationFrame(renderChart);
 });
 
-function renderResults(games) {
-  const results = $("search-results");
-  results.replaceChildren();
+// ---------------------------------------------------------------------------
+// "Recruiter?" balloon
+// ---------------------------------------------------------------------------
 
-  for (const game of games) {
-    const item = el("li", "result");
-    const text = el("div", "result-text");
-    text.append(el("span", "result-title", game.title));
+function setUpRecruiter() {
+  const toggle = $("recruiter-toggle");
+  const balloon = $("recruiter-balloon");
+  const loginButton = $("recruiter-login");
 
-    const meta = el("div", "result-meta");
-    meta.append(el("span", "", `From ${money.format(game.cheapest_price)}`));
-    const tracked = state.gamesById.has(game.id);
-    if (tracked) {
-      meta.append(el("span", "badge", "Tracked"));
-    }
-    text.append(meta);
-
-    item.append(thumbnail(game.thumb_url, 104), text);
-
-    if (tracked) {
-      const button = el("button", "button button-small", "View history");
-      button.type = "button";
-      button.setAttribute("aria-label", `View price history of ${game.title}`);
-      button.addEventListener("click", () => selectGame(game.id, { scroll: true }));
-      item.append(button);
-    }
-
-    results.append(item);
+  function setOpen(open) {
+    balloon.hidden = !open;
+    toggle.setAttribute("aria-expanded", String(open));
   }
+
+  toggle.addEventListener("click", () => setOpen(balloon.hidden));
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !balloon.hidden) {
+      setOpen(false);
+      toggle.focus();
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!balloon.hidden && !balloon.contains(event.target) && event.target !== toggle) {
+      setOpen(false);
+    }
+  });
+
+  loginButton.addEventListener("click", async () => {
+    loginButton.disabled = true;
+    loginButton.textContent = "Logging in…";
+    setStatus($("recruiter-error"), "");
+    try {
+      const response = await fetch("auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "recruiter", password: "recruiter" }),
+      });
+      if (response.ok) {
+        window.location.href = "account.html";
+        return;
+      }
+      const message = response.status === 429
+        ? "Too many login attempts. Try again later."
+        : "The recruiter account isn't available right now. Please try again later.";
+      setStatus($("recruiter-error"), message, true);
+    } catch {
+      setStatus($("recruiter-error"), "Can't reach the server. Check your connection and try again.", true);
+    }
+    loginButton.disabled = false;
+    loginButton.textContent = "Log in as recruiter";
+  });
 }
 
-// ---------------------------------------------------------------------------
-// Start
-// ---------------------------------------------------------------------------
-
-loadStats();
-loadGames();
+setUpRecruiter();
+loadDeals();
