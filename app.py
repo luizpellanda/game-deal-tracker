@@ -12,7 +12,11 @@ STEAM_STORE_ID = 1
 
 
 class CheapSharkError(Exception):
-    pass
+    """CheapShark failed. status_code is its HTTP status (404, 429, ...) or None if it never answered."""
+
+    def __init__(self, message, status_code=None):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def fetch_json(endpoint, params):
@@ -26,11 +30,17 @@ def fetch_json(endpoint, params):
         if response.status_code == 429:
             wait_time = response.headers.get("Retry-After", "unknown")
             raise CheapSharkError(
-                f"Rate limited on {endpoint} (429). Retry after {wait_time} seconds."
+                f"Rate limited on {endpoint} (429). Retry after {wait_time} seconds.",
+                status_code=429,
             )
         response.raise_for_status()
     except requests.RequestException as e:
-        raise CheapSharkError(f"Request to {endpoint} failed: {e}") from e
+        # e.response exists when CheapShark answered with an error (like 404);
+        # it is None when it never answered (timeout, no internet).
+        status_code = e.response.status_code if e.response is not None else None
+        raise CheapSharkError(
+            f"Request to {endpoint} failed: {e}", status_code=status_code
+        ) from e
     print(f"{endpoint} status: {response.status_code}")
     return response.json()
 
