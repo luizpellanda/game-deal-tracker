@@ -27,7 +27,7 @@ def log_in(client, username):
     return register.json()["id"]
 
 
-def add_known_games(*game_ids):
+def add_known_games(*game_ids):  # * allows me to add as many games as needed - tupla
     """Put games straight into the games table, so adding them never calls CheapShark."""
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
         for game_id in game_ids:
@@ -121,7 +121,9 @@ def test_same_game_twice_returns_409(clear_watchlist, client, fake_cheapshark):
 # ---------------------------------------------------------------------------
 
 
-def test_add_new_game_asks_cheapshark_and_saves_it(clear_watchlist, client, fake_cheapshark):
+def test_add_new_game_asks_cheapshark_and_saves_it(
+    clear_watchlist, client, fake_cheapshark
+):
     # A game the database has never seen
     log_in(client, "test1")
 
@@ -137,7 +139,9 @@ def test_add_new_game_asks_cheapshark_and_saves_it(clear_watchlist, client, fake
     assert query("SELECT game_id FROM watchlist") == [(77,)]
 
 
-def test_add_game_unknown_to_cheapshark_returns_404(clear_watchlist, client, fake_cheapshark):
+def test_add_game_unknown_to_cheapshark_returns_404(
+    clear_watchlist, client, fake_cheapshark
+):
     # A game id CheapShark does not have
     log_in(client, "test1")
 
@@ -168,17 +172,23 @@ def test_cheapshark_down_returns_502(clear_watchlist, client, fake_cheapshark):
 
 
 @pytest.mark.parametrize("target_price", [0, -5, 1000.01, 19.999])
-def test_invalid_target_price_returns_422(clear_watchlist, client, fake_cheapshark, target_price):
+def test_invalid_target_price_returns_422(
+    clear_watchlist, client, fake_cheapshark, target_price
+):
     # Zero, negative, above 1000, or 3 decimal places: refused
     add_known_games(10)
     log_in(client, "test1")
 
-    response = client.post("/watchlist", json={"game_id": 10, "target_price": target_price})
+    response = client.post(
+        "/watchlist", json={"game_id": 10, "target_price": target_price}
+    )
     assert response.status_code == 422
     assert query("SELECT * FROM watchlist") == []
 
 
-def test_target_price_of_exactly_1000_is_accepted(clear_watchlist, client, fake_cheapshark):
+def test_target_price_of_exactly_1000_is_accepted(
+    clear_watchlist, client, fake_cheapshark
+):
     # The top limit itself is allowed
     add_known_games(10)
     log_in(client, "test1")
@@ -193,39 +203,46 @@ def test_target_price_of_exactly_1000_is_accepted(clear_watchlist, client, fake_
 
 
 def test_eleventh_game_returns_409(clear_watchlist, client, fake_cheapshark):
-    # 11 known games
-    add_known_games(*range(1, 12))
+    limit = watchlist.WATCHLIST_MAX_GAMES  # 10
+
+    # One known game more than the limit (games 1 to 11)
+    add_known_games(*range(1, limit + 2))
     log_in(client, "test1")
 
     # The first 10 work
-    for game_id in range(1, watchlist.WATCHLIST_MAX_GAMES + 1):
+    for game_id in range(1, limit + 1):
         response = client.post("/watchlist", json={"game_id": game_id})
         assert response.status_code == 201
 
     # The 11th is refused, and not saved
-    response = client.post("/watchlist", json={"game_id": 11})
+    response = client.post("/watchlist", json={"game_id": limit + 1})
     assert response.status_code == 409
-    assert response.json()["detail"].startswith("Your watchlist is full (10 games).")
-    assert len(query("SELECT * FROM watchlist")) == watchlist.WATCHLIST_MAX_GAMES
+    assert response.json()["detail"].startswith(f"Your watchlist is full ({limit} games).")
+    assert len(query("SELECT * FROM watchlist")) == limit
 
 
 def fill_the_tracker():
     """Put 100 different games in the watchlist of 10 other people, straight in the database."""
-    add_known_games(*range(1, watchlist.SYSTEM_MAX_GAMES + 1))
+    add_known_games(
+        *range(1, watchlist.SYSTEM_MAX_GAMES + 1)
+    )  # * opens the range as a tupla, if not, reads range(1,x)
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
         for person in range(10):
             user_id = conn.execute(
                 "INSERT INTO users (username, password_hash) VALUES (%s, 'x') RETURNING id",
                 (f"filler{person}",),
             ).fetchone()[0]
-            for game_id in range(person * 10 + 1, person * 10 + 11):
+            first_game = person * 10 + 1  # person 0 starts at game 1, person 1 at 11, ...
+            for game_id in range(first_game, first_game + 10):
                 conn.execute(
                     "INSERT INTO watchlist (user_id, game_id) VALUES (%s, %s)",
                     (user_id, game_id),
                 )
 
 
-def test_new_game_when_tracker_is_full_returns_409(clear_watchlist, client, fake_cheapshark):
+def test_new_game_when_tracker_is_full_returns_409(
+    clear_watchlist, client, fake_cheapshark
+):
     # 100 different games are already followed
     fill_the_tracker()
     log_in(client, "test1")
@@ -233,11 +250,15 @@ def test_new_game_when_tracker_is_full_returns_409(clear_watchlist, client, fake
     # A game nobody follows: refused, before asking CheapShark
     response = client.post("/watchlist", json={"game_id": 500})
     assert response.status_code == 409
-    assert response.json()["detail"].startswith("The tracker is full right now (100 games).")
+    assert response.json()["detail"].startswith(
+        "The tracker is full right now (100 games)."
+    )
     assert fake_cheapshark == []
 
 
-def test_followed_game_when_tracker_is_full_returns_201(clear_watchlist, client, fake_cheapshark):
+def test_followed_game_when_tracker_is_full_returns_201(
+    clear_watchlist, client, fake_cheapshark
+):
     # 100 different games are already followed
     fill_the_tracker()
     log_in(client, "test1")
