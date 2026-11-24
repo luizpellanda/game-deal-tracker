@@ -148,3 +148,68 @@ def add_to_watchlist(
         "title": title,
         "target_price": body.target_price,
     }
+
+
+@router.get("/watchlist")
+def get_from_watchlist(access_token: Annotated[str | None, Cookie()] = None):
+    user = get_current_user(access_token)
+    user_id = user["id"]
+
+    with psycopg.connect(DATABASE_URL) as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT ON (w.game_id)
+            w.game_id, g.title, g.thumb_url, w.target_price,
+            p.sale_price, p.normal_price, p.store_id, p.recorded_on
+            FROM watchlist w
+            JOIN games g ON g.id = w.game_id
+            LEFT JOIN price_history p
+            ON p.game_id = w.game_id
+            AND p.recorded_on = (SELECT MAX(recorded_on) FROM price_history WHERE game_id = w.game_id)
+            WHERE w.user_id = %s
+            ORDER BY w.game_id, p.sale_price
+            """,
+            (user_id,),
+        ).fetchall()
+
+    items = []
+
+    for row in rows:
+        target_price = row[3]
+        lowest_price = row[4]
+        normal_price = row[5]
+
+        if lowest_price is not None and normal_price:
+            discount_percent = round(100 - (lowest_price / normal_price * 100))
+        else:
+            discount_percent = None
+
+        below_target = (
+            lowest_price is not None
+            and target_price is not None
+            and lowest_price <= target_price
+        )
+
+        items.append(
+            {
+                "game_id": row[0],
+                "title": row[1],
+                "thumb_url": row[2],
+                "target_price": target_price,
+                "lowest_price": lowest_price,
+                "normal_price": normal_price,
+                "store_id": row[6],
+                "recorded_on": row[7],
+                "discount_percent": discount_percent,
+                "below_target": below_target,
+            }
+        )
+
+    items.sort(
+        key=lambda game: (
+            game["discount_percent"] if game["discount_percent"] is not None else -1
+        ),
+        reverse=True,
+    )
+
+    return items
